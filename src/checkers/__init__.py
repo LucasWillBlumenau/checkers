@@ -7,7 +7,6 @@ from pygame.surface import Surface
 
 from checkers.game import (
     BLACK_PIECE,
-    EMPTY,
     WHITE_PIECE,
     Move,
     Piece,
@@ -15,7 +14,7 @@ from checkers.game import (
     check_winner,
     create_board,
     evaluate_board_moves,
-    minmax,
+    minimax,
 )
 
 WIDTH = 800
@@ -136,7 +135,7 @@ def run_game(
             time.sleep(0.5)
             print("Computer 1 is thinking")
 
-            move = minmax(board, turn)
+            move = minimax(board, turn)
             apply_move(board, move)
 
             turn = BLACK_PIECE
@@ -146,7 +145,7 @@ def run_game(
             time.sleep(0.25)
             print("Computer 2 is thinking")
 
-            move = minmax(board, turn)
+            move = minimax(board, turn)
             apply_move(board, move)
 
             turn = WHITE_PIECE

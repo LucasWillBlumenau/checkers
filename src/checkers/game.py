@@ -7,10 +7,10 @@ WHITE_PIECE = 2
 ROW_SIZE = 8
 COLUMN_SIZE = 8
 
-MAX_SEARCH_DEPTH = 6
+MAX_SEARCH_DEPTH = 10
 
-MIN_RATING = -12
-MAX_RATING = 12
+MIN_RATING = -37
+MAX_RATING = 37
 
 
 @dataclass(slots=True)
@@ -203,7 +203,8 @@ def evaluate_attacking_moves(
                     source=initial_position,
                     destination=position,
                     taken_pieces=taken_pieces,
-                    promote=y in (0, 7) and not get_position_is_king(board, position),
+                    promote=y in (0, 7)
+                    and not get_position_is_king(board, initial_position),
                 )
             ]
         return moves
@@ -230,7 +231,7 @@ def evaluate_positional_moves(
                     source=position,
                     destination=target,
                     taken_pieces=[],
-                    promote=y in (0, 7) and not get_position_is_king(board, target),
+                    promote=y in (0, 7) and not get_position_is_king(board, position),
                 )
             )
 
@@ -340,28 +341,6 @@ def print_board(board: list[list[Piece | None]]) -> None:
     print()
 
 
-def parse_input(value: str, max_value: int) -> int | None:
-    if not value.isdigit():
-        return None
-    parsed = int(value)
-    if parsed >= max_value:
-        return None
-    return parsed
-
-
-def choose_move(moves: list[Move]) -> Move:
-    for i, move in enumerate(moves, 1):
-        print(f"{i}. {move.source} -> {move.destination}")
-    print()
-
-    option = parse_input(input("Escolha uma opção: "), len(moves))
-    while option is None:
-        print("Opção inválida. Tente novamente.")
-        option = parse_input(input("Move: "), len(moves))
-
-    return moves[option - 1]
-
-
 def calculate_board_rating(board: list[list[Piece | None]]) -> int:
     rating = 0
     for row in reversed(board):
@@ -383,10 +362,12 @@ def copy_board(board: list[list[Piece | None]]) -> list[list[Piece | None]]:
     return new_board
 
 
-def minmax(board: list[list[Piece | None]], turn: int) -> Move:
+def minimax(board: list[list[Piece | None]], turn: int) -> Move:
     evaluation_board = copy_board(board)
 
-    def min(turn: int, depth: int) -> tuple[int, Move | None]:
+    def min_value(
+        turn: int, alpha: int, beta: int, depth: int
+    ) -> tuple[int, Move | None]:
         if depth == MAX_SEARCH_DEPTH:
             return calculate_board_rating(evaluation_board), None
 
@@ -398,15 +379,22 @@ def minmax(board: list[list[Piece | None]], turn: int) -> Move:
 
         for move in moves:
             apply_move(evaluation_board, move)
-            rating, _ = max(next_turn, next_depth)
+            rating, _ = max_value(next_turn, alpha, beta, next_depth)
+            undo_move(evaluation_board, move)
+
+            beta = min(beta, rating)
+            if alpha >= beta:
+                return rating, move
+
             if min_rating_value > rating:
                 min_rating_value = rating
                 min_rating_move = move
-            undo_move(evaluation_board, move)
 
         return min_rating_value, min_rating_move
 
-    def max(turn: int, depth: int) -> tuple[int, Move | None]:
+    def max_value(
+        turn: int, alpha: int, beta: int, depth: int
+    ) -> tuple[int, Move | None]:
         if depth == MAX_SEARCH_DEPTH:
             return calculate_board_rating(evaluation_board), None
 
@@ -418,37 +406,25 @@ def minmax(board: list[list[Piece | None]], turn: int) -> Move:
 
         for move in moves:
             apply_move(evaluation_board, move)
-            rating, _ = min(next_turn, next_depth)
+            rating, _ = min_value(next_turn, alpha, beta, next_depth)
+            undo_move(evaluation_board, move)
+
+            alpha = max(alpha, rating)
+            if alpha >= beta:
+                return rating, move
+
             if max_rating_value < rating:
                 max_rating_value = rating
                 max_rating_move = move
-            undo_move(evaluation_board, move)
 
         return max_rating_value, max_rating_move
 
-    _, move = max(turn, 0) if turn == BLACK_PIECE else min(turn, 0)
+    _, move = (
+        max_value(turn, MIN_RATING, MAX_RATING, 0)
+        if turn == BLACK_PIECE
+        else min_value(turn, MIN_RATING, MAX_RATING, 0)
+    )
     if move is None:
         raise Exception("cannot calculate move sequence")
 
     return move
-
-
-def main() -> None:
-    board = create_board()
-    turn = BLACK_PIECE
-    while not is_game_over(board, turn):
-        print_board(board)
-
-        if turn == BLACK_PIECE:
-            moves = evaluate_board_moves(board, turn)
-            move = choose_move(moves)
-        else:
-            move = minmax(board, turn)
-            print(f"Computer played {move.source} -> {move.destination}")
-
-        apply_move(board, move)
-        turn = WHITE_PIECE if turn == BLACK_PIECE else BLACK_PIECE
-
-
-if __name__ == "__main__":
-    main()
