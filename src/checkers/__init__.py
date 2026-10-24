@@ -12,6 +12,7 @@ from checkers.game import (
     Move,
     Piece,
     apply_move,
+    check_winner,
     create_board,
     evaluate_board_moves,
     minmax,
@@ -126,9 +127,11 @@ def key_moves_by_destination(
     return moves_by_target
 
 
-def run_game(board: list[list[Piece | None]]) -> None:
+def run_game(
+    board: list[list[Piece | None]], is_running: list[bool], winner: list[int | None]
+) -> None:
     turn = BLACK_PIECE
-    while True:
+    while is_running[0] and winner[0] is None:
         if turn == WHITE_PIECE:
             time.sleep(0.5)
             print("Computer 1 is thinking")
@@ -150,6 +153,8 @@ def run_game(board: list[list[Piece | None]]) -> None:
 
             print(f"Computer 2 played {move.source} -> {move.destination}")
 
+        winner[0] = check_winner(board, turn)
+
 
 def main() -> None:
     _ = pygame.init()
@@ -162,17 +167,19 @@ def main() -> None:
     moves_by_position = key_moves_by_position(evaluate_board_moves(board, turn))
     available_targets: dict[tuple[int, int], Move] = {}
 
-    thread = Thread(target=run_game, args=(board,))
+    is_running = [True]
+    winner: list[int | None] = [None]
+    thread = Thread(target=run_game, args=(board, is_running, winner))
     thread.start()
 
-    while running:
+    while is_running[0] or winner[0]:
         draw_board(surface, board, [target for target in available_targets])
         pygame.display.flip()
         _ = clock.tick(FPS)
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                running = False
+                is_running[0] = False
         #     if event.type == pygame.MOUSEBUTTONUP:
         #         square = get_square(event.pos)
         #         move = available_targets.get(square)
@@ -199,7 +206,13 @@ def main() -> None:
         # pygame.display.flip()
         # clock.tick(FPS)
 
+    thread.join()
     pygame.quit()
+
+    if winner[0] == BLACK_PIECE:
+        print("Black won")
+    elif winner[0] == WHITE_PIECE:
+        print("White won")
 
 
 if __name__ == "__main__":

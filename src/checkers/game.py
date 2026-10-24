@@ -309,8 +309,27 @@ def undo_move(board: list[list[Piece | None]], move: Move) -> None:
         board[y][x] = Piece(opposite_piece, is_king)
 
 
-def is_game_over(board: list[list[Piece | None]], turn: int) -> bool:
-    return False
+def check_winner(board: list[list[Piece | None]], turn: int) -> int | None:
+    black_count = 0
+    white_count = 0
+    for row in board:
+        for piece in row:
+            if piece is None:
+                continue
+            if piece.color == WHITE_PIECE:
+                white_count += 1
+            else:
+                black_count += 1
+
+    if black_count == 0:
+        return WHITE_PIECE
+    if white_count == 0:
+        return BLACK_PIECE
+
+    moves = evaluate_board_moves(board, turn)
+    if len(moves) == 0:
+        return switch_turn(turn)
+    return None
 
 
 def print_board(board: list[list[Piece | None]]) -> None:
