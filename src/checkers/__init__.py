@@ -1,13 +1,15 @@
-# Example file showing a basic pygame "game loop"
 import time
 from threading import Thread
 
 import pygame
+from pygame.font import Font
 from pygame.surface import Surface
 
 from checkers.game import (
     BLACK_PIECE,
+    BLACK_WON,
     WHITE_PIECE,
+    WHITE_WON,
     Move,
     Piece,
     apply_move,
@@ -129,13 +131,18 @@ def key_moves_by_destination(
 def run_game(
     board: list[list[Piece | None]], is_running: list[bool], winner: list[int | None]
 ) -> None:
+    positions_count: dict[int, int] = {}
     turn = BLACK_PIECE
-    while is_running[0] and winner[0] is None:
+    while is_running[0]:
+        winner[0] = check_winner(board, turn, positions_count)
+        if winner[0] is not None:
+            break
+
         if turn == WHITE_PIECE:
             time.sleep(0.5)
             print("Computer 1 is thinking")
 
-            move = minimax(board, turn)
+            move = minimax(board, turn, positions_count)
             apply_move(board, move)
 
             turn = BLACK_PIECE
@@ -145,21 +152,43 @@ def run_game(
             time.sleep(0.25)
             print("Computer 2 is thinking")
 
-            move = minimax(board, turn)
+            move = minimax(board, turn, positions_count)
             apply_move(board, move)
 
             turn = WHITE_PIECE
 
             print(f"Computer 2 played {move.source} -> {move.destination}")
 
-        winner[0] = check_winner(board, turn)
+
+def get_text_by_winner(winner: int) -> str:
+    if winner == BLACK_WON:
+        return "Black Won"
+    if winner == WHITE_WON:
+        return "White Won"
+    return "Draw"
+
+
+def draw_winner(surface: Surface, font: Font, winner: int) -> None:
+    _ = surface.fill(BLACK)
+
+    text = get_text_by_winner(winner)
+    text_surface = font.render(text, False, WHITE)
+
+    text_x = (WIDTH - text_surface.get_width()) // 2
+    text_y = (HEIGHT - text_surface.get_height()) // 2
+    text_position = (text_x, text_y)
+
+    _ = surface.blit(text_surface, text_position)
 
 
 def main() -> None:
     _ = pygame.init()
+    pygame.font.init()
+
     surface = pygame.display.set_mode((WIDTH, HEIGHT))
+    font = pygame.font.SysFont("Comic Sans MS", 60)
+
     clock = pygame.time.Clock()
-    running = True
 
     board = create_board()
     turn = BLACK_PIECE
@@ -171,47 +200,21 @@ def main() -> None:
     thread = Thread(target=run_game, args=(board, is_running, winner))
     thread.start()
 
-    while is_running[0] or winner[0]:
-        draw_board(surface, board, [target for target in available_targets])
-        pygame.display.flip()
-        _ = clock.tick(FPS)
-
+    while is_running[0]:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 is_running[0] = False
-        #     if event.type == pygame.MOUSEBUTTONUP:
-        #         square = get_square(event.pos)
-        #         move = available_targets.get(square)
-        #         if move is not None:
-        #             apply_move(board, move)
-        #             turn = WHITE_PIECE
 
-        #             moves_by_position = {}
-        #             available_targets = {}
+        if winner[0]:
+            draw_winner(surface, font, winner[0])
+        else:
+            draw_board(surface, board, [target for target in available_targets])
 
-        #             draw_board(surface, board, [target for target in available_targets])
-        #             pygame.display.flip()
-        #             clock.tick(FPS)
-
-        #             continue
-
-        #         available_moves = moves_by_position.get(square)
-        #         if available_moves is None:
-        #             available_targets = {}
-        #         else:
-        #             available_targets = key_moves_by_destination(available_moves)
-
-        # draw_board(surface, board, [target for target in available_targets])
-        # pygame.display.flip()
-        # clock.tick(FPS)
+        pygame.display.flip()
+        _ = clock.tick(FPS)
 
     thread.join()
     pygame.quit()
-
-    if winner[0] == BLACK_PIECE:
-        print("Black won")
-    elif winner[0] == WHITE_PIECE:
-        print("White won")
 
 
 if __name__ == "__main__":

@@ -1,16 +1,22 @@
 from dataclasses import dataclass
 
+# Board Setup
 EMPTY = 0
 BLACK_PIECE = 1
 WHITE_PIECE = 2
-
 ROW_SIZE = 8
 COLUMN_SIZE = 8
 
-MAX_SEARCH_DEPTH = 10
-
+# Minimax + Evaluation
+MAX_SEARCH_DEPTH = 8
 MIN_RATING = -37
 MAX_RATING = 37
+
+# Game State
+BLACK_WON = 0
+WHITE_WON = 1
+DRAW = 2
+LIMIT_OF_POSITION_REPETION = 3
 
 
 @dataclass(slots=True)
@@ -36,6 +42,16 @@ class Piece:
 
     def copy(self) -> "Piece":
         return Piece(self.color, self.is_king)
+
+
+@dataclass(slots=True)
+class BoardState:
+    black_piece: int
+    black_king: int
+    black_regular: int
+    white_piece: int
+    white_king: int
+    white_regular: int
 
 
 def get_symbol(color: int) -> str:
@@ -147,6 +163,24 @@ def get_position_is_king(
     if piece is None:
         return False
     return piece.is_king
+
+
+def get_offset_by_piece(piece: Piece | None) -> int:
+    if piece is None:
+        return 0
+    if piece.color == BLACK_PIECE:
+        return 64
+    return 128
+
+
+def get_board_id(board: list[list[Piece | None]]) -> int:
+    board_id = 0
+    for i, row in enumerate(board):
+        for j, piece in enumerate(row):
+            offset = get_offset_by_piece(piece)
+            shift_size = offset + i * ROW_SIZE + j
+            board_id |= 1 << shift_size
+    return board_id
 
 
 def evaluate_attacking_moves(
@@ -310,26 +344,70 @@ def undo_move(board: list[list[Piece | None]], move: Move) -> None:
         board[y][x] = Piece(opposite_piece, is_king)
 
 
-def check_winner(board: list[list[Piece | None]], turn: int) -> int | None:
-    black_count = 0
-    white_count = 0
+def get_board_state(board: list[list[Piece | None]]) -> BoardState:
+    black_regular = 0
+    white_regular = 0
+    black_king = 0
+    white_king = 0
     for row in board:
         for piece in row:
             if piece is None:
                 continue
-            if piece.color == WHITE_PIECE:
-                white_count += 1
+            elif piece.color == BLACK_PIECE and piece.is_king:
+                black_king += 1
+            elif piece.color == BLACK_PIECE:
+                black_regular += 1
+            elif piece.color == WHITE_PIECE and piece.is_king:
+                white_king += 1
             else:
-                black_count += 1
+                white_regular += 1
 
-    if black_count == 0:
+    return BoardState(
+        white_king=white_king,
+        white_regular=white_regular,
+        white_piece=white_king + white_regular,
+        black_king=black_king,
+        black_regular=black_regular,
+        black_piece=black_king + black_regular,
+    )
+
+
+def increment_position_count(positions_count: dict[int, int], board_id: int) -> None:
+    if positions_count.get(board_id) is None:
+        positions_count[board_id] = 1
+    else:
+        positions_count[board_id] += 1
+
+
+def check_winner(
+    board: list[list[Piece | None]],
+    turn: int,
+    positions_count: dict[int, int],
+    moves: list[Move] | None = None,
+) -> int | None:
+    board_id = get_board_id(board)
+    increment_position_count(positions_count, board_id)
+    board_state = get_board_state(board)
+    if board_state.black_piece == 0:
         return WHITE_PIECE
-    if white_count == 0:
+    if board_state.white_piece == 0:
         return BLACK_PIECE
 
-    moves = evaluate_board_moves(board, turn)
+    if moves is None:
+        moves = evaluate_board_moves(board, turn)
+
     if len(moves) == 0:
-        return switch_turn(turn)
+        if turn == BLACK_PIECE:
+            return WHITE_WON
+        return BLACK_WON
+
+    no_regular = board_state.black_regular == 0 and board_state.white_regular == 0
+    insufficient_kings = board_state.black_king <= 2 and board_state.white_king <= 2
+    if (no_regular and insufficient_kings) or positions_count[
+        board_id
+    ] >= LIMIT_OF_POSITION_REPETION:
+        return DRAW
+
     return None
 
 
@@ -362,8 +440,19 @@ def copy_board(board: list[list[Piece | None]]) -> list[list[Piece | None]]:
     return new_board
 
 
-def minimax(board: list[list[Piece | None]], turn: int) -> Move:
+def get_rating_by_state(state: int) -> int:
+    if state == BLACK_WON:
+        return MAX_RATING
+    if state == WHITE_WON:
+        return MIN_RATING
+    return 0
+
+
+def minimax(
+    board: list[list[Piece | None]], turn: int, positions_count: dict[int, int]
+) -> Move:
     evaluation_board = copy_board(board)
+    evaluation_positions_count = positions_count.copy()
 
     def min_value(
         turn: int, alpha: int, beta: int, depth: int
@@ -375,7 +464,11 @@ def minimax(board: list[list[Piece | None]], turn: int) -> Move:
         next_turn = switch_turn(turn)
         next_depth = depth + 1
         min_rating_value = MAX_RATING
-        min_rating_move = None
+        min_rating_move = moves[0] if moves else None
+
+        state = check_winner(evaluation_board, turn, evaluation_positions_count, moves)
+        if state is not None:
+            return get_rating_by_state(state), None
 
         for move in moves:
             apply_move(evaluation_board, move)
@@ -402,7 +495,11 @@ def minimax(board: list[list[Piece | None]], turn: int) -> Move:
         next_turn = switch_turn(turn)
         next_depth = depth + 1
         max_rating_value = MIN_RATING
-        max_rating_move = None
+        max_rating_move = moves[0] if moves else None
+
+        state = check_winner(evaluation_board, turn, evaluation_positions_count, moves)
+        if state is not None:
+            return get_rating_by_state(state), None
 
         for move in moves:
             apply_move(evaluation_board, move)
